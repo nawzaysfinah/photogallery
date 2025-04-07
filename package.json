@@ -1,0 +1,20 @@
+{
+  "name": "photogallery",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "netlify dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.1.0",
+    "mongodb": "^6.15.0",
+    "multer": "^1.4.5-lts.2",
+    "parse-multipart": "^1.0.4"
+  }
+}
