@@ -7,15 +7,22 @@ if (!uri) {
   );
 }
 
-let cachedClientPromise = null;
+let cachedClient = null;
 async function getClient() {
-  if (!cachedClientPromise) {
-    cachedClientPromise = new MongoClient(uri).connect();
+  if (!cachedClient) {
+    try {
+      cachedClient = await new MongoClient(uri).connect();
+    } catch (err) {
+      console.error("MongoDB connection error:", err);
+      throw err;
+    }
   }
-  return cachedClientPromise;
+  return cachedClient;
 }
 
 exports.handler = async (event, context) => {
+  context.callbackWaitsForEmptyEventLoop = false;
+
   if (event.httpMethod !== "GET") {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
@@ -30,7 +37,17 @@ exports.handler = async (event, context) => {
     const db = client.db("imageUpload");
     const collection = db.collection("images");
 
-    const image = await collection.findOne({ _id: ObjectId(id) });
+    let objectId;
+    try {
+      objectId = new ObjectId(id);
+    } catch (error) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: "Invalid image ID format" }),
+      };
+    }
+
+    const image = await collection.findOne({ _id: objectId });
     if (!image) {
       return { statusCode: 404, body: "Image not found" };
     }
@@ -45,6 +62,13 @@ exports.handler = async (event, context) => {
       isBase64Encoded: true,
     };
   } catch (error) {
-    return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+    console.error("Error in getImage.js:", error);
+    return {
+      statusCode: 500,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ error: error.message }),
+    };
   }
 };

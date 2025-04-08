@@ -8,13 +8,17 @@ if (!uri) {
   );
 }
 
-// Cache the connection promise between invocations.
-let cachedClientPromise = null;
+let cachedClient = null;
 async function getClient() {
-  if (!cachedClientPromise) {
-    cachedClientPromise = new MongoClient(uri).connect();
+  if (!cachedClient) {
+    try {
+      cachedClient = await new MongoClient(uri).connect();
+    } catch (err) {
+      console.error("MongoDB connection error:", err);
+      throw err;
+    }
   }
-  return cachedClientPromise;
+  return cachedClient;
 }
 
 async function saveImage(file) {
@@ -25,7 +29,7 @@ async function saveImage(file) {
   const doc = {
     filename: file.filename,
     contentType: file.type,
-    data: file.data, // file.data is a Buffer
+    data: Buffer.from(file.data), // Ensure data is a Buffer
     createdAt: new Date(),
   };
 
@@ -34,6 +38,8 @@ async function saveImage(file) {
 }
 
 exports.handler = async (event, context) => {
+  context.callbackWaitsForEmptyEventLoop = false;
+
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
@@ -60,16 +66,34 @@ exports.handler = async (event, context) => {
     if (!parts || parts.length === 0) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: "No file uploaded" }),
+        body: JSON.stringify({
+          error: "No file uploaded or invalid form data",
+        }),
       };
     }
 
     // Use the first part as the image file.
     const file = parts[0];
+    if (!file.filename) {
+      file.filename = `upload-${Date.now()}`;
+    }
 
     const insertedId = await saveImage(file);
-    return { statusCode: 200, body: JSON.stringify({ id: insertedId }) };
+    return {
+      statusCode: 200,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ id: insertedId.toString() }),
+    };
   } catch (error) {
-    return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+    console.error("Error in upload.js:", error);
+    return {
+      statusCode: 500,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ error: error.message }),
+    };
   }
 };
