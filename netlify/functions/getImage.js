@@ -1,5 +1,3 @@
-// functions/getImage.js
-
 const { MongoClient, ObjectId } = require("mongodb");
 
 const uri = process.env.MONGODB_URI;
@@ -9,19 +7,12 @@ if (!uri) {
   );
 }
 
-let cachedClient = null;
-
+let cachedClientPromise = null;
 async function getClient() {
-  if (
-    cachedClient &&
-    cachedClient.topology &&
-    cachedClient.topology.isConnected()
-  ) {
-    return cachedClient;
+  if (!cachedClientPromise) {
+    cachedClientPromise = new MongoClient(uri).connect();
   }
-  cachedClient = new MongoClient(uri);
-  await cachedClient.connect();
-  return cachedClient;
+  return cachedClientPromise;
 }
 
 exports.handler = async (event, context) => {

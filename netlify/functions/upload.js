@@ -1,5 +1,3 @@
-// functions/upload.js
-
 const { MongoClient } = require("mongodb");
 const multipart = require("parse-multipart");
 
@@ -10,20 +8,13 @@ if (!uri) {
   );
 }
 
-// Global variable to cache the MongoDB client instance.
-let cachedClient = null;
-
+// Cache the connection promise between invocations.
+let cachedClientPromise = null;
 async function getClient() {
-  if (
-    cachedClient &&
-    cachedClient.topology &&
-    cachedClient.topology.isConnected()
-  ) {
-    return cachedClient;
+  if (!cachedClientPromise) {
+    cachedClientPromise = new MongoClient(uri).connect();
   }
-  cachedClient = new MongoClient(uri);
-  await cachedClient.connect();
-  return cachedClient;
+  return cachedClientPromise;
 }
 
 async function saveImage(file) {
@@ -34,7 +25,7 @@ async function saveImage(file) {
   const doc = {
     filename: file.filename,
     contentType: file.type,
-    data: file.data, // file.data is a Buffer from parse-multipart
+    data: file.data, // file.data is a Buffer
     createdAt: new Date(),
   };
 
@@ -48,7 +39,7 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    // Get the Content-Type header (could be lower- or uppercase)
+    // Retrieve Content-Type header (handle both cases)
     const contentType =
       event.headers["content-type"] || event.headers["Content-Type"];
     if (!contentType) {
@@ -58,12 +49,11 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Decode the body if it’s base64 encoded
+    // Convert event body to a Buffer (account for base64 encoding)
     const bodyBuffer = event.isBase64Encoded
       ? Buffer.from(event.body, "base64")
       : Buffer.from(event.body);
 
-    // Retrieve the multipart boundary and parse the parts.
     const boundary = multipart.getBoundary(contentType);
     const parts = multipart.Parse(bodyBuffer, boundary);
 

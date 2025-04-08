@@ -1,5 +1,3 @@
-// functions/images.js
-
 const { MongoClient } = require("mongodb");
 
 const uri = process.env.MONGODB_URI;
@@ -9,19 +7,12 @@ if (!uri) {
   );
 }
 
-let cachedClient = null;
-
+let cachedClientPromise = null;
 async function getClient() {
-  if (
-    cachedClient &&
-    cachedClient.topology &&
-    cachedClient.topology.isConnected()
-  ) {
-    return cachedClient;
+  if (!cachedClientPromise) {
+    cachedClientPromise = new MongoClient(uri).connect();
   }
-  cachedClient = new MongoClient(uri);
-  await cachedClient.connect();
-  return cachedClient;
+  return cachedClientPromise;
 }
 
 exports.handler = async (event, context) => {
@@ -34,12 +25,12 @@ exports.handler = async (event, context) => {
     const db = client.db("imageUpload");
     const collection = db.collection("images");
 
-    // Retrieve only metadata (exclude the image data for efficiency)
+    // Get only metadata (exclude binary image data)
     const images = await collection
       .find({}, { projection: { filename: 1, contentType: 1, createdAt: 1 } })
       .toArray();
 
-    // Append a URL to each image for retrieval through getImage.
+    // Append a retrieval URL for each image
     images.forEach((image) => {
       image.url = `/.netlify/functions/getImage?id=${image._id}`;
     });
