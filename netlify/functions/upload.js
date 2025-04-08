@@ -1,4 +1,4 @@
-// netlify/functions/upload.js
+// functions/upload.js
 
 const { MongoClient } = require("mongodb");
 const multipart = require("parse-multipart");
@@ -10,16 +10,31 @@ if (!uri) {
   );
 }
 
-const client = new MongoClient(uri);
+// Global variable to cache the MongoDB client instance.
+let cachedClient = null;
+
+async function getClient() {
+  if (
+    cachedClient &&
+    cachedClient.topology &&
+    cachedClient.topology.isConnected()
+  ) {
+    return cachedClient;
+  }
+  cachedClient = new MongoClient(uri);
+  await cachedClient.connect();
+  return cachedClient;
+}
 
 async function saveImage(file) {
+  const client = await getClient();
   const db = client.db("imageUpload");
   const collection = db.collection("images");
 
   const doc = {
     filename: file.filename,
     contentType: file.type,
-    data: file.data, // file.data is a Buffer
+    data: file.data, // file.data is a Buffer from parse-multipart
     createdAt: new Date(),
   };
 
@@ -33,7 +48,7 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    // Retrieve the content-type header (case-insensitive)
+    // Get the Content-Type header (could be lower- or uppercase)
     const contentType =
       event.headers["content-type"] || event.headers["Content-Type"];
     if (!contentType) {
@@ -43,18 +58,15 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Decode the body if it's base64 encoded
+    // Decode the body if it’s base64 encoded
     const bodyBuffer = event.isBase64Encoded
       ? Buffer.from(event.body, "base64")
       : Buffer.from(event.body);
 
-    // Get the boundary from the content type
+    // Retrieve the multipart boundary and parse the parts.
     const boundary = multipart.getBoundary(contentType);
-
-    // Parse the multipart form data into parts
     const parts = multipart.Parse(bodyBuffer, boundary);
 
-    // Check if any file parts were found
     if (!parts || parts.length === 0) {
       return {
         statusCode: 400,
@@ -62,13 +74,8 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // For simplicity, assume the first part is the image file
+    // Use the first part as the image file.
     const file = parts[0];
-
-    // Connect to MongoDB if not already connected
-    if (!client.isConnected()) {
-      await client.connect();
-    }
 
     const insertedId = await saveImage(file);
     return { statusCode: 200, body: JSON.stringify({ id: insertedId }) };

@@ -1,3 +1,5 @@
+// functions/getImage.js
+
 const { MongoClient, ObjectId } = require("mongodb");
 
 const uri = process.env.MONGODB_URI;
@@ -7,7 +9,20 @@ if (!uri) {
   );
 }
 
-const client = new MongoClient(uri);
+let cachedClient = null;
+
+async function getClient() {
+  if (
+    cachedClient &&
+    cachedClient.topology &&
+    cachedClient.topology.isConnected()
+  ) {
+    return cachedClient;
+  }
+  cachedClient = new MongoClient(uri);
+  await cachedClient.connect();
+  return cachedClient;
+}
 
 exports.handler = async (event, context) => {
   if (event.httpMethod !== "GET") {
@@ -20,9 +35,7 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    if (!client.isConnected()) {
-      await client.connect();
-    }
+    const client = await getClient();
     const db = client.db("imageUpload");
     const collection = db.collection("images");
 
